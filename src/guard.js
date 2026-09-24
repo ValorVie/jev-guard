@@ -104,13 +104,18 @@ const READ_ONLY = new Set(["read", "glob", "grep", "ls", "list", "find", "webfet
   "notebookread", "listmcpresourcestool", "readmcpresourcetool", "toolsearch", "skill", "task", "agent", "tabs_context_mcp", "read_page", "get_page_text",
   "read_file", "read_many_files", "list_directory", "search_file_content", "grep_search", "google_web_search", "web_fetch", "write_todos"]);
 const NEVER_EXTERNAL = new Set(["edit", "write", "multiedit", "notebookedit", "apply_patch", "patch", "delete", "glob", "grep", "ls", "list", "find", "todowrite", "todoread",
-  "askuserquestion", "exitplanmode", "task", "agent", "write_file", "replace", "write_todos"]);
+  "askuserquestion", "exitplanmode", "write_file", "replace", "write_todos"]);
+// task/agent sit only in READ_ONLY: the sub-agent's own calls are judged one by one, but what it brings back can carry external text.
 export const MIN_SCAN_CHARS = 200;
 const MAX_STATE_CHARS = 60_000; // Jev's state ceiling is ~32k tokens
 
 export function thresholds(env = process.env) {
-  const n = (k, d) => (env[k] !== undefined && Number.isFinite(+env[k]) ? +env[k] : d);
-  return { denyScore: n("JEV_GUARD_DENY_SCORE", 2.5), askScore: n("JEV_GUARD_ASK_SCORE", 1.5), askP: n("JEV_GUARD_ASK_P", 0.75), injectP: n("JEV_GUARD_INJECT_P", 0.6),
+  // Out-of-range values fall back to the default: an env var set by something else must not switch the guard off silently.
+  const n = (k, d, max = 1) => {
+    const v = env[k] === undefined || env[k] === "" ? NaN : +env[k];
+    return v >= 0 && v <= max ? v : d;
+  };
+  return { denyScore: n("JEV_GUARD_DENY_SCORE", 2.5, 3), askScore: n("JEV_GUARD_ASK_SCORE", 1.5, 3), askP: n("JEV_GUARD_ASK_P", 0.75), injectP: n("JEV_GUARD_INJECT_P", 0.6),
     untrustedP: n("JEV_GUARD_UNTRUSTED_P", 0.7), userP: n("JEV_GUARD_USER_P", 0.85), skillP: n("JEV_GUARD_SKILL_P", 0.8), skillSeriousP: n("JEV_GUARD_SKILL_SERIOUS_P", 0.45) };
 }
 const list = (v) => new Set((v ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
@@ -190,7 +195,7 @@ export async function scanInstructions({ text, source }, opts = {}) {
 }
 
 /** Paths that are instruction files for some agent: their content is expected to instruct, so they get scanInstructions. */
-export const INSTRUCTION_FILE = /(^|\/)(SKILL|CLAUDE|AGENTS|GEMINI|copilot-instructions)\.md$|(^|\/)(rules|commands|agents|prompts)\/[^/]+\.(md|mdc)$/i;
+export const INSTRUCTION_FILE = /(^|\/)(SKILL|CLAUDE|AGENTS|GEMINI|copilot-instructions)\.md$|(^|\/)(rules|commands|agents|prompts)\/[^/]+\.(md|mdc)$|(^|\/)\.(claude|codex|gemini|cursor)\/(docs|reference)\/[^/]+\.(md|mdc)$/i;
 
 /** The lines of flagged content most likely to hold the embedded instruction, so a later call can be compared against them. */
 export function excerpt(text, max = 500) {

@@ -40,8 +40,9 @@ export const JevGuard = async ({ client, directory }) => {
 
     "tool.execute.after": async (input, output) => {
       const source = input.args?.url ?? input.args?.filePath ?? input.args?.path;
-      const r = await (source && INSTRUCTION_FILE.test(source)
-        ? scanInstructionsCached({ text: output.output, source })
+      const instructions = /^skill$/i.test(input.tool ?? "") || (source && INSTRUCTION_FILE.test(source));  // skill passes {name}, no path
+      const r = await (instructions
+        ? scanInstructionsCached({ text: output.output, source: source ?? input.args?.name ?? input.tool })
         : scanContent({ text: output.output, tool: input.tool, source: preview(input.args, 120), task: readSession(input.sessionID).prompts.at(-1)?.text })
       ).catch(() => null);
       if (r?.flagged) remember(input.sessionID, "flags", { kind: r.kind, source, tool: input.tool, p: +r.p.toFixed(2), excerpt: excerpt(output.output), reported: true });
