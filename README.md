@@ -99,7 +99,7 @@ Jev is asked narrow, typed questions; the policy lives in code (`src/guard.js`).
 
 **Action** (`PreToolUse` / `BeforeTool` / `beforeShellExecution` / `tool_call` / `tool.execute.before` / `terminal/create`):
 
-- `risk` — a 4-level Score: *read-only* → *easy to undo* → *hard to undo or outside the workspace* → *destructive*. Returned as a position 0–3.
+- `risk` — a 4-level Score: *no persistent side effects* → *routine/easily reversible inside the user's management scope* → *meaningful blast radius or outside that scope* → *destructive/privileged/production-critical*. Returned as a position 0–3. The current working directory is treated as an agent launch point, not a security boundary; SSH and paths outside cwd do not raise risk by themselves.
 - `approval` — a Noul: *would a careful senior engineer want the human to approve this exact call?*
 
 ```
@@ -167,6 +167,8 @@ Results shorter than 200 characters and results of local edit/search tools are s
 | `JEV_GUARD_USER_P` | `0.85` | user-requested probability that turns ask into allow |
 | `JEV_GUARD_SESSIONS` | `~/.jev-guard/sessions` | per-session memory directory |
 | `JEV_GUARD_SCAN_CACHE` | `~/.jev-guard/scan-cache.json` | instruction-file scan cache |
+| `JEV_GUARD_TRUSTED_ROOTS` | | comma-separated paths the user normally manages; supplied to Jev as context, never treated as an automatic allowlist |
+| `JEV_GUARD_TRUSTED_HOSTS` | | comma-separated SSH/remote host names the user normally manages; supplied as context, never treated as automatically safe |
 | `JEV_GUARD_SKIP_TOOLS` | | comma-separated tool names never assessed |
 | `JEV_GUARD_SKIP_SCAN` | | comma-separated tool names whose results are never scanned |
 | `JEV_GUARD_FAIL_CLOSED` | unset | if set, an unreachable Jev **denies** instead of allowing |
@@ -174,6 +176,17 @@ Results shorter than 200 characters and results of local edit/search tools are s
 | `JEV_BASE_URL` | unset | any System One server (`<base>/v1/systemone`), e.g. a local Kev; takes precedence over every key |
 | `JEV_BASE_API_KEY` | unset | bearer key sent only to `JEV_BASE_URL` |
 | `JEV_GUARD_CONFIG` | `~/.jev-guard/config.json` | where `jev-guard key` stores the key |
+
+### Management scope
+
+For agent setups where the working directory is only a control-plane/home directory and normal work happens across other repositories or remote hosts, define the resources the user normally manages:
+
+```bash
+export JEV_GUARD_TRUSTED_ROOTS="$HOME/workspaces,/srv/app-7f2,/opt/service-91c"
+export JEV_GUARD_TRUSTED_HOSTS="node-c7f3,node-a19e,node-b52d"
+```
+
+These values are **context, not an allowlist**. A reversible rename on a known host should not become high risk merely because it uses SSH or lives outside cwd, while destructive commands, privilege escalation, credential access, production-impacting changes, and large-blast-radius operations can still score high on the same host.
 
 Scores must lie in 0–3 and probabilities in 0–1; anything else falls back to the default.
 
