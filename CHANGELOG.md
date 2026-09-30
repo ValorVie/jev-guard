@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Valor fork: action risk is based on blast radius, reversibility, privilege and managed scope instead of treating cwd as the security boundary; SSH/out-of-cwd alone no longer raises risk. Optional `JEV_GUARD_TRUSTED_ROOTS` and `JEV_GUARD_TRUSTED_HOSTS` provide management-scope context without bypassing policy.
+- Valor fork: `user_requested` now recognizes normal implementation steps within an explicitly authorized task instead of requiring the user to name the exact tool call.
 - Files under `.claude/`, `.codex/`, `.gemini/` or `.cursor/` `docs/` and `reference/` count as instruction files (#1).
 - OpenCode/Kilo: `skill` results are checked as instruction files, not as untrusted content (#2).
 - `Task`/`Agent` results are scanned for injection; out-of-range thresholds fall back to their defaults (#3).

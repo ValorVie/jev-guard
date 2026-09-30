@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
-import { decide, collectText, truncate, assessAction, scanContent } from "../src/guard.js";
+import { decide, collectText, truncate, assessAction, scanContent, policyScope } from "../src/guard.js";
 import { handleHook } from "../src/hook.js";
 import { runProxy } from "../src/acp.js";
 
@@ -56,6 +56,49 @@ test("assessAction skips read-only tools, scores the rest", async () => {
   assert.equal((await assessAction({ tool: "Bash", input: { command: "rm -rf /" } }, opts)).level, "deny");
   assert.equal((await assessAction({ tool: "Bash", input: { command: "git push" } }, opts)).level, "ask");
   assert.equal((await assessAction({ tool: "Bash", input: { command: "ls" } }, opts)).level, "allow");
+});
+
+test("policy scope is optional context, not a bypass", async () => {
+  assert.equal(policyScope(env), undefined);
+  assert.deepEqual(policyScope({
+    JEV_GUARD_TRUSTED_ROOTS: "/srv/app-7f2, /opt/service-91c ",
+    JEV_GUARD_TRUSTED_HOSTS: "NODE-C7F3, node-a19e",
+  }), {
+    trusted_roots: ["/srv/app-7f2", "/opt/service-91c"],
+    trusted_hosts: ["node-c7f3", "node-a19e"],
+    note: "These are resources the user normally manages. They are not automatically safe; judge the actual action by blast radius, reversibility, privilege, credentials, and production/shared-system impact.",
+  });
+
+  let seen;
+  const capture = async (_url, { body }) => {
+    seen = JSON.parse(body).state;
+    return {
+      ok: true,
+      json: async () => ({
+        answers: {
+          risk: { type: "score", score: 1.2, confidence: 0.8 },
+          approval: { type: "noul", noul: 0.2 },
+          user_requested: { type: "noul", noul: 0.8 },
+          from_untrusted: { type: "noul", noul: 0.01 },
+        },
+      }),
+    };
+  };
+  const scopedEnv = {
+    JEV_API_KEY: "test",
+    JEV_GUARD_TRUSTED_ROOTS: "/srv/app-7f2,/opt/service-91c",
+    JEV_GUARD_TRUSTED_HOSTS: "node-c7f3,node-a19e",
+  };
+  const r = await assessAction({
+    tool: "Bash",
+    input: { command: "ssh node-c7f3 'mv /srv/app-7f2/cache.db /srv/app-7f2/cache.db.bak'" },
+    cwd: "/home/agent-hub-38d",
+  }, { env: scopedEnv, fetchImpl: capture });
+
+  assert.equal(r.level, "allow");
+  assert.deepEqual(seen.policy_scope.trusted_hosts, ["node-c7f3", "node-a19e"]);
+  assert.deepEqual(seen.policy_scope.trusted_roots, ["/srv/app-7f2", "/opt/service-91c"]);
+  assert.equal(seen.cwd, "/home/agent-hub-38d");
 });
 
 test("scanContent flags injection and canary, not discussion", async () => {
